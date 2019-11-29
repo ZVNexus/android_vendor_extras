@@ -22,12 +22,14 @@
 from __future__ import print_function
 
 import sys
+sys.dont_write_bytecode = True
 import json
 import os
 import subprocess
 import re
 import argparse
 import textwrap
+import colors
 from functools import cmp_to_key
 from xml.etree import ElementTree
 
@@ -98,7 +100,7 @@ def fetch_query_via_ssh(remote_url, query):
             reviews.append(review)
         except:
             pass
-    args.quiet or print('Found {0} reviews'.format(len(reviews)))
+    args.quiet or colors.print_pass('Found {0} reviews'.format(len(reviews)))
     return reviews
 
 
@@ -220,7 +222,7 @@ if __name__ == '__main__':
         if needs_abandon:
             # Perform the abandon only if the branch already exists
             if not args.quiet:
-                print('Abandoning branch: %s' % args.start_branch[0])
+                colors.print_pass('Abandoning branch: %s' % args.start_branch[0])
             subprocess.check_output(['repo', 'abandon', args.start_branch[0]])
             if not args.quiet:
                 print('')
@@ -309,7 +311,7 @@ if __name__ == '__main__':
         change = int(change)
         review = next((x for x in reviews if x['number'] == change), None)
         if review is None:
-            print('Change %d not found, skipping' % change)
+            colors.print_warn('Change %d not found, skipping' % change)
             continue
 
         mergables.append({
@@ -331,16 +333,16 @@ if __name__ == '__main__':
                 mergables[-1]['id'] = '{0}/{1}'.format(change, patchset)
                 mergables[-1]['patchset'] = patchset
             except (IndexError, ValueError):
-                args.quiet or print('ERROR: The patch set {0}/{1} could not be found, using CURRENT_REVISION instead.'.format(change, patchset))
+                args.quiet or colors.print_fail('ERROR: The patch set {0}/{1} could not be found, using CURRENT_REVISION instead.'.format(change, patchset))
 
     for item in mergables:
-        args.quiet or print('Applying change number {0}...'.format(item['id']))
+        args.quiet or colors.print_pass('Applying change number {0}...'.format(item['id']))
         # Check if change is open and exit if it's not, unless -f is specified
         if (item['status'] != 'OPEN' and item['status'] != 'NEW' and item['status'] != 'DRAFT') and not args.query:
             if args.force:
-                print('!! Force-picking a closed change !!\n')
+                colors.print_warn('!! Force-picking a closed change !!\n')
             else:
-                print('Change status is ' + item['status'] + '. Skipping the cherry pick.\nUse -f to force this pick.')
+                colors.print_bold('Change status is ' + item['status'] + '. Skipping the cherry pick.\nUse -f to force this pick.')
                 continue
 
         # Convert the project name to a project path
@@ -352,10 +354,10 @@ if __name__ == '__main__':
         elif args.path:
             project_path = args.path
         elif args.ignore_missing:
-            print('WARNING: Skipping {0} since there is no project directory for: {1}\n'.format(item['id'], item['project']))
+            colors.print_warn('WARNING: Skipping {0} since there is no project directory for: {1}\n'.format(item['id'], item['project']))
             continue
         else:
-            sys.stderr.write('ERROR: For {0}, could not determine the project path for project {1}\n'.format(item['id'], item['project']))
+            colors.print_fail('ERROR: For {0}, could not determine the project path for project {1}\n'.format(item['id'], item['project']))
             sys.exit(1)
 
         # If --start-branch is given, create the branch (more than once per path is okay; repo ignores gracefully)
@@ -381,7 +383,7 @@ if __name__ == '__main__':
                         head_change_id = output[len(output) - j]
                         break
                 if head_change_id.strip() == item['change_id']:
-                    print('Skipping {0} - already picked in {1} as HEAD~{2}'.format(item['id'], project_path, i))
+                    colors.print_bold('Skipping {0} - already picked in {1} as HEAD~{2}'.format(item['id'], project_path, i))
                     found_change = True
                     break
         if found_change:
@@ -389,9 +391,9 @@ if __name__ == '__main__':
 
         # Print out some useful info
         if not args.quiet:
-            print('--> Subject:       "{0}"'.format(item['subject'].encode('utf-8')))
-            print('--> Project path:  {0}'.format(project_path))
-            print('--> Change number: {0} (Patch Set {1})'.format(item['id'], item['patchset']))
+            colors.print_bold('--> Subject:       "{0}"'.format(item['subject'].encode('utf-8')))
+            colors.print_bold('--> Project path:  {0}'.format(project_path))
+            colors.print_bold('--> Change number: {0} (Patch Set {1})'.format(item['id'], item['patchset']))
 
         if 'anonymous http' in item['fetch']:
             method = 'anonymous http'
@@ -400,7 +402,7 @@ if __name__ == '__main__':
 
         # Fetch from Gerrit
         if args.verbose:
-            print('Fetching from {0}'.format(args.gerrit))
+            colors.print_bold('Fetching from {0}'.format(args.gerrit))
 
         if args.pull:
             cmd = ['git pull --no-edit', item['fetch'][method]['url'], item['fetch'][method]['ref']]
@@ -409,7 +411,7 @@ if __name__ == '__main__':
         if args.quiet:
             cmd.append('--quiet')
         else:
-            print('Fetching from {0}'.format(args.gerrit))
+            colors.print_bold('Fetching from {0}'.format(args.gerrit))
 
         if args.pull:
             cmd = ['git pull --no-edit', item['fetch'][method]['url'], item['fetch'][method]['ref']]
@@ -421,7 +423,7 @@ if __name__ == '__main__':
             print(cmd)
         result = subprocess.call([' '.join(cmd)], cwd=project_path, shell=True)
         if result != 0:
-            print('ERROR: git command failed')
+            colors.print_fail('ERROR: git command failed')
             sys.exit(result)
         # Perform the cherry-pick
         if not args.pull:
@@ -432,7 +434,7 @@ if __name__ == '__main__':
                 cmd_out = None
             result = subprocess.call(cmd, cwd=project_path, shell=True, stdout=cmd_out, stderr=cmd_out)
             if result != 0:
-                print('ERROR: git command failed')
+                colors.print_fail('ERROR: git command failed')
                 sys.exit(result)
         if not args.quiet:
             print('')
